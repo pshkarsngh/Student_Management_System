@@ -2,6 +2,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+
 # Student data model
 class Student(BaseModel):
     name: str
@@ -45,4 +46,27 @@ def add_student(student: Student):
     return {
         "message": "Student added successfully",
         "student": student_data
+    }
+
+
+# Get all students
+@app.get("/students")
+def get_students():
+    return {
+        "students": students
+    }
+
+
+# Get a student by ID
+@app.get("/students/{student_id}")
+def get_student(student_id: int):
+
+    for student in students:
+        if student["id"] == student_id:
+            return {
+                "student": student
+            }
+
+    return {
+        "message": "Student not found"
     }
