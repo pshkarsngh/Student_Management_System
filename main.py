@@ -1,112 +1,38 @@
+"""FastAPI application entry point."""
+
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from pydantic import BaseModel
+
+from database import create_tables
+from routers import auth, students
 
 
-# Student data model
-class Student(BaseModel):
-    name: str
-    age: int
-    course: str
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Create any missing tables when the application starts."""
+
+    create_tables()
+    yield
 
 
-# Create FastAPI application
 app = FastAPI(
     title="Student Management API",
-    description="Backend for managing students",
-    version="1.0.0"
+    description=(
+        "A secure Student Management System backend with JWT authentication. "
+        "Sign up or log in via /auth, then use the bearer token to manage "
+        "students."
+    ),
+    version="2.0.0",
+    lifespan=lifespan,
 )
 
-
-# Temporary storage
-students = []
-
-
-# Home route
-@app.get("/")
-def home():
-    return {
-        "message": "Student Management Backend is running"
-    }
+app.include_router(auth.router)
+app.include_router(students.router)
 
 
-# Add a new student
-@app.post("/students")
-def add_student(student: Student):
+@app.get("/", tags=["Health"])
+def home() -> dict[str, str]:
+    """Public health/landing endpoint."""
 
-    student_data = {
-        "id": len(students) + 1,
-        "name": student.name,
-        "age": student.age,
-        "course": student.course
-    }
-
-    students.append(student_data)
-
-    return {
-        "message": "Student added successfully",
-        "student": student_data
-    }
-
-
-# Get all students
-@app.get("/students")
-def get_students():
-    return {
-        "students": students
-    }
-
-
-# Get a student by ID
-@app.get("/students/{student_id}")
-def get_student(student_id: int):
-
-    for student in students:
-        if student["id"] == student_id:
-            return {
-                "student": student
-            }
-
-    return {
-        "message": "Student not found"
-    }
-
-
-# Update student details
-@app.put("/students/{student_id}")
-def update_student(student_id: int, updated_student: Student):
-
-    for student in students:
-        if student["id"] == student_id:
-
-            student["name"] = updated_student.name
-            student["age"] = updated_student.age
-            student["course"] = updated_student.course
-
-            return {
-                "message": "Student updated successfully",
-                "student": student
-            }
-
-    return {
-        "message": "Student not found"
-    }
-
-
-# Delete a student by ID
-@app.delete("/students/{student_id}")
-def delete_student(student_id: int):
-
-    for student in students:
-        if student["id"] == student_id:
-
-            students.remove(student)
-
-            return {
-                "message": "Student deleted successfully",
-                "student": student
-            }
-
-    return {
-        "message": "Student not found"
-    }
+    return {"message": "Student Management Backend is running"}

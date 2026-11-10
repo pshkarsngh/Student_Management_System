@@ -1,38 +1,48 @@
+"""Database engine, session factory, and FastAPI dependency."""
 
-import os
+from collections.abc import Generator
 
-from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.pool import StaticPool
 
-# Load environment variables from .env file
-load_dotenv()
+from config import settings
 
-# Read database URL from environment
-DATABASE_URL = os.getenv("DATABASE_URL")
+# SQLite is used by the automated test suite. A StaticPool keeps a single
+# in-memory database alive across connections.
+_engine_kwargs: dict = {"pool_pre_ping": True}
+if settings.database_url.startswith("sqlite"):
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+    _engine_kwargs["poolclass"] = StaticPool
 
-# Check whether database URL exists
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is missing. Check your .env file.")
+engine = create_engine(settings.database_url, **_engine_kwargs)
 
-# Create PostgreSQL engine
-engine = create_engine(DATABASE_URL)
-
-# Create database session
 SessionLocal = sessionmaker(
     autocommit=False,
     autoflush=False,
-    bind=engine
+    bind=engine,
 )
 
-# Base class for database models
 Base = declarative_base()
 
 
-# Database dependency for FastAPI
-def get_db():
+def get_db() -> Generator[Session, None, None]:
+    """Yield a database session and always close it afterwards."""
+
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
+
+
+def create_tables() -> None:
+    """Create any missing tables for the registered models."""
+
+    # Import models so they are registered on Base.metadata before create_all.
+    from models import Student, User  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)
