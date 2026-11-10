@@ -55,7 +55,24 @@ def get_students():
     return {
         "students": students
     }
-    # Update student details
+
+
+# Get a student by ID
+@app.get("/students/{student_id}")
+def get_student(student_id: int):
+
+    for student in students:
+        if student["id"] == student_id:
+            return {
+                "student": student
+            }
+
+    return {
+        "message": "Student not found"
+    }
+
+
+# Update student details
 @app.put("/students/{student_id}")
 def update_student(student_id: int, updated_student: Student):
 
@@ -76,13 +93,17 @@ def update_student(student_id: int, updated_student: Student):
     }
 
 
-# Get a student by ID
-@app.get("/students/{student_id}")
-def get_student(student_id: int):
+# Delete a student by ID
+@app.delete("/students/{student_id}")
+def delete_student(student_id: int):
 
     for student in students:
         if student["id"] == student_id:
+
+            students.remove(student)
+
             return {
+                "message": "Student deleted successfully",
                 "student": student
             }
 
