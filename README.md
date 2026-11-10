@@ -8,6 +8,67 @@ Authenticated users can create, list, view, update, and delete student records.
 Student routes are protected with bearer tokens, passwords are never stored or
 returned in plaintext, and all secrets are loaded from environment variables.
 
+> **Visual README:** GitHub renders the Mermaid graphs below automatically.
+> If you are reading this in a viewer without Mermaid support, open the
+> repository on GitHub.
+
+---
+
+## Visual Architecture
+
+### System graph
+
+```mermaid
+flowchart LR
+    Browser["Swagger UI / HTTP client"]
+
+    subgraph API["FastAPI application"]
+        Main["main.py<br/>lifespan + routers"]
+        AuthRouter["routers/auth.py"]
+        StudentRouter["routers/students.py"]
+        Deps["dependencies.py<br/>get_current_user"]
+        Schemas["schemas.py<br/>Pydantic validation"]
+        Security["security.py<br/>Argon2 + JWT"]
+    end
+
+    subgraph Data["Data layer"]
+        Models["models.py<br/>SQLAlchemy models"]
+        DB[("PostgreSQL")]
+    end
+
+    Browser -->|"HTTP / JSON or form"| Main
+    Main --> AuthRouter
+    Main --> StudentRouter
+    AuthRouter --> Schemas
+    AuthRouter --> Security
+    AuthRouter --> Models
+    StudentRouter --> Schemas
+    StudentRouter --> Deps
+    Deps --> Security
+    Deps --> Models
+    StudentRouter --> Models
+    Models --> DB
+```
+
+### Route graph
+
+```mermaid
+flowchart TD
+    API["Student Management API"] --> Public["Public routes"]
+    API --> Protected["Protected routes<br/>Bearer JWT required"]
+
+    Public --> Root["GET /"]
+    Public --> Signup["POST /auth/signup"]
+    Public --> Login["POST /auth/login"]
+
+    Protected --> Me["GET /auth/me"]
+    Protected --> Create["POST /students"]
+    Protected --> List["GET /students<br/>page + page_size"]
+    Protected --> Read["GET /students/{student_id}"]
+    Protected --> Update["PUT /students/{student_id}"]
+    Protected --> Delete["DELETE /students/{student_id}"]
+```
+
 ---
 
 ## Features
@@ -64,6 +125,7 @@ Student_management_System/
 ├── tests/
 │   ├── conftest.py
 │   ├── test_auth.py
+│   ├── test_config.py
 │   ├── test_security.py
 │   └── test_students.py
 ├── .env.example            # Placeholder configuration (safe to commit)
@@ -174,6 +236,28 @@ lifespan handler:
 - `students`
 - `users`
 
+### Entity relationship graph
+
+```mermaid
+erDiagram
+    USERS {
+        int id PK
+        varchar email UK "unique and indexed"
+        varchar hashed_password "Argon2 hash"
+    }
+
+    STUDENTS {
+        int id PK
+        varchar name
+        int age
+        varchar course "required"
+        varchar email UK "unique and indexed"
+    }
+```
+
+`users` and `students` are intentionally independent tables: any authenticated
+user can manage student records, so there is no per-user foreign key.
+
 ### Existing database migration
 
 The current application requires `students.course` to be `NOT NULL`. Fresh
@@ -234,6 +318,37 @@ The API is available at:
 ## Authentication
 
 Authentication uses OAuth2 password flow with bearer JWTs.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant A as FastAPI /auth
+    participant S as security.py
+    participant DB as PostgreSQL
+
+    C->>A: POST /auth/signup
+    A->>DB: Check duplicate email
+    A->>S: hash_password(password)
+    S-->>A: Argon2 hash
+    A->>DB: INSERT user
+    A-->>C: 201 Created
+
+    C->>A: POST /auth/login (form data)
+    A->>DB: SELECT user by email
+    A->>S: verify_password(password, hash)
+    S-->>A: true or false
+    A->>S: create_access_token(user.id)
+    S-->>A: signed JWT
+    A-->>C: 200 OK + access_token
+
+    C->>A: GET /students with Bearer token
+    A->>S: decode_access_token(token)
+    S-->>A: payload or InvalidTokenError
+    A->>DB: SELECT user by sub
+    A->>DB: SELECT paginated students
+    A-->>C: 200 OK + student page
+```
 
 1. Create an account with `POST /auth/signup`.
 2. Log in with `POST /auth/login` using form data.
@@ -381,6 +496,22 @@ curl -X POST http://127.0.0.1:8000/students \
 Authentication failures return a generic message so it is not possible to
 distinguish an unknown email from a wrong password.
 
+### Request and error lifecycle graph
+
+```mermaid
+flowchart TD
+    Request["Incoming request"] --> Validate["Pydantic validation"]
+    Validate -->|"invalid"| E422["422 Unprocessable Entity"]
+    Validate -->|"valid"| AuthCheck{"Valid Bearer JWT?"}
+    AuthCheck -->|"no"| E401["401 Unauthorized"]
+    AuthCheck -->|"yes"| Handler["Route handler"]
+    Handler --> DB[("PostgreSQL")]
+    DB -->|"duplicate email"| E409["Rollback + 409 Conflict"]
+    DB -->|"other database error"| E500["Rollback + 500 Internal Server Error"]
+    DB -->|"success"| Response["Typed response model"]
+    Response --> Client["Client receives JSON"]
+```
+
 ---
 
 ## Security Notes
@@ -428,6 +559,16 @@ Coverage includes:
 - Invalid student input and missing student IDs.
 - Expired token and token-for-unknown-user rejection.
 - Configuration validation (short/placeholder secrets and unsafe algorithms).
+
+### Test coverage graph
+
+```mermaid
+pie title Automated tests by area
+    "Authentication" : 11
+    "Security and JWT" : 6
+    "Students" : 15
+    "Configuration" : 4
+```
 
 **Verified result on Python 3.12.10:**
 
