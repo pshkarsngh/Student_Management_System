@@ -1,20 +1,91 @@
+<div align="center">
+
 # Student Management System API
 
-A secure, production-style **Student Management System** backend built with
-**FastAPI**, **PostgreSQL**, **SQLAlchemy**, **Pydantic**, **Argon2** password
-hashing, and **JWT** authentication.
+**A secure, portfolio-grade backend for managing student records.**
 
-Authenticated users can create, list, view, update, and delete student records.
-Student routes are protected with bearer tokens, passwords are never stored or
-returned in plaintext, and all secrets are loaded from environment variables.
+Built with FastAPI, PostgreSQL, SQLAlchemy, Pydantic, Argon2, and JWT authentication.
 
-> **Visual README:** GitHub renders the Mermaid graphs below automatically.
-> If you are reading this in a viewer without Mermaid support, open the
-> repository on GitHub.
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.162.x-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.x-D71F00?logo=sqlalchemy&logoColor=white)](https://www.sqlalchemy.org/)
+[![JWT](https://img.shields.io/badge/Auth-JWT-000000?logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
+[![Tests](https://img.shields.io/badge/Tests-36%20passing-brightgreen)](#testing)
+
+</div>
 
 ---
 
-## Visual Architecture
+## Overview
+
+This project is a complete **Student Management System backend** designed to
+demonstrate clean API architecture, secure authentication, validated request
+contracts, safe database access, and automated testing.
+
+Authenticated users can create, list, view, update, and delete student records.
+Student routes are protected with bearer JWTs, passwords are hashed with Argon2,
+and secrets are loaded exclusively from environment variables.
+
+> **Visual documentation:** GitHub renders the Mermaid diagrams in this README
+> automatically.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Highlights](#highlights)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Configuration](#configuration)
+- [Database Setup](#database-setup)
+- [Running the API](#running-the-api)
+- [Authentication](#authentication)
+- [API Reference](#api-reference)
+- [Error Handling](#error-handling)
+- [Security](#security)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+- [Production Hardening](#production-hardening)
+- [Author](#author)
+
+---
+
+## Highlights
+
+| Area | Capability |
+| --- | --- |
+| Authentication | Signup, login, JWT access tokens, current-user endpoint |
+| Password security | Argon2 hashing with secure verification |
+| Authorization | Bearer-token protection on every student route |
+| Student management | Full CRUD with duplicate-email protection |
+| API quality | Typed request/response schemas and pagination |
+| Reliability | Rollback-safe database sessions and controlled errors |
+| Configuration | Environment-based secrets with startup validation |
+| Testing | 36 automated tests with FastAPI `TestClient` |
+| Documentation | Swagger UI, ReDoc, OpenAPI, and Mermaid diagrams |
+
+### Architecture decisions
+
+- **Routers by domain** — authentication and student endpoints are isolated in
+  `routers/auth.py` and `routers/students.py`.
+- **Authentication as a dependency** — `dependencies.py` centralizes JWT
+  validation and current-user resolution.
+- **Security primitives separated** — Argon2 and JWT logic live in
+  `security.py`, independent of HTTP routing.
+- **Schemas separate from ORM models** — `schemas.py` defines the public API
+  contract and never exposes hashed passwords.
+- **Explicit configuration** — `config.py` validates required environment
+  variables at startup.
+- **Isolated tests** — the suite uses in-memory SQLite and never touches
+  PostgreSQL data.
+
+---
+
+## Architecture
 
 ### System graph
 
@@ -50,56 +121,37 @@ flowchart LR
     Models --> DB
 ```
 
-### Route graph
+### Request lifecycle
 
 ```mermaid
 flowchart TD
-    API["Student Management API"] --> Public["Public routes"]
-    API --> Protected["Protected routes<br/>Bearer JWT required"]
-
-    Public --> Root["GET /"]
-    Public --> Signup["POST /auth/signup"]
-    Public --> Login["POST /auth/login"]
-
-    Protected --> Me["GET /auth/me"]
-    Protected --> Create["POST /students"]
-    Protected --> List["GET /students<br/>page + page_size"]
-    Protected --> Read["GET /students/{student_id}"]
-    Protected --> Update["PUT /students/{student_id}"]
-    Protected --> Delete["DELETE /students/{student_id}"]
+    Request["Incoming request"] --> Validate["Pydantic validation"]
+    Validate -->|"invalid"| E422["422 Unprocessable Entity"]
+    Validate -->|"valid"| AuthCheck{"Valid Bearer JWT?"}
+    AuthCheck -->|"no"| E401["401 Unauthorized"]
+    AuthCheck -->|"yes"| Handler["Route handler"]
+    Handler --> DB[("PostgreSQL")]
+    DB -->|"duplicate email"| E409["Rollback + 409 Conflict"]
+    DB -->|"other database error"| E500["Rollback + 500 Internal Server Error"]
+    DB -->|"success"| Response["Typed response model"]
+    Response --> Client["Client receives JSON"]
 ```
 
 ---
 
-## Features
+## Tech Stack
 
-- User signup and login with Argon2 password hashing.
-- JWT access tokens with configurable expiration.
-- `GET /auth/me` current-user endpoint.
-- Bearer-token protection on every student endpoint.
-- Full student CRUD with duplicate-email protection.
-- Pagination on `GET /students`.
-- Strict Pydantic request validation and typed response schemas.
-- Safe database error handling with rollback.
-- Modern FastAPI lifespan startup (no deprecated `on_event`).
-- Automated pytest suite using FastAPI `TestClient` and an isolated SQLite
-  database.
-- Secrets kept in `.env`; `.env` is git-ignored.
-
----
-
-## Technologies
-
-| Layer | Technology |
-| --- | --- |
-| Language | Python 3.12 |
-| Web framework | FastAPI |
-| Database | PostgreSQL |
-| ORM | SQLAlchemy 2.x |
-| Validation | Pydantic 2.x / pydantic-settings |
-| Password hashing | Argon2 via `pwdlib[argon2]` |
-| Authentication | JWT via PyJWT |
-| Testing | pytest + FastAPI TestClient |
+| Layer | Technology | Purpose |
+| --- | --- | --- |
+| Language | Python 3.12 | Runtime |
+| Web framework | FastAPI | HTTP API, dependency injection, OpenAPI |
+| Database | PostgreSQL | Persistent relational storage |
+| ORM | SQLAlchemy 2.x | Models, sessions, transactions |
+| Validation | Pydantic 2.x | Request/response schemas |
+| Settings | pydantic-settings | Typed environment configuration |
+| Password hashing | Argon2 via `pwdlib[argon2]` | Secure password storage |
+| Authentication | JWT via PyJWT | Stateless access tokens |
+| Testing | pytest + FastAPI `TestClient` | Automated API and unit tests |
 
 ---
 
@@ -108,7 +160,7 @@ flowchart TD
 ```text
 Student_management_System/
 ├── main.py                 # FastAPI app, lifespan, router registration
-├── config.py               # Typed environment settings
+├── config.py               # Typed environment settings and validation
 ├── database.py             # Engine, session factory, get_db, create_tables
 ├── models.py               # Student and User SQLAlchemy models
 ├── schemas.py              # Pydantic request/response schemas
@@ -136,7 +188,14 @@ Student_management_System/
 
 ---
 
-## Installation
+## Getting Started
+
+### Prerequisites
+
+- **Python 3.12+**
+- **PostgreSQL** (local or hosted)
+- **Git**
+- `pip` and a virtual environment
 
 ### 1. Clone the repository
 
@@ -170,9 +229,9 @@ pip install -r requirements.txt
 
 ---
 
-## Environment Configuration
+## Configuration
 
-Copy the example file and fill in your own values:
+Copy the example environment file and replace the placeholders:
 
 Windows PowerShell:
 
@@ -186,7 +245,16 @@ macOS / Linux:
 cp .env.example .env
 ```
 
-`.env`:
+### Environment variables
+
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | Yes | — | SQLAlchemy PostgreSQL connection URL |
+| `JWT_SECRET_KEY` | Yes | — | Secret used to sign JWTs; minimum 32 characters |
+| `JWT_ALGORITHM` | No | `HS256` | `HS256`, `HS384`, or `HS512` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | No | `30` | Access-token lifetime in minutes |
+
+Example `.env`:
 
 ```env
 DATABASE_URL=postgresql://username:password@localhost:5432/student_management
@@ -201,20 +269,16 @@ Generate a strong JWT secret:
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-Rules:
+> The application refuses to start if `JWT_SECRET_KEY` is missing, shorter than
+> 32 characters, or still set to the example placeholder.
 
-- Never commit `.env`.
-- Never hardcode database passwords or JWT secrets in source code.
-- `JWT_SECRET_KEY` must be at least 32 characters.
-- The application refuses to start if `JWT_SECRET_KEY` is still the example
-  placeholder.
-- `ACCESS_TOKEN_EXPIRE_MINUTES` controls token lifetime (default `30`).
+**Never commit `.env`.** Only `.env.example` belongs in version control.
 
 ---
 
 ## Database Setup
 
-### Create the PostgreSQL database
+### 1. Create the database
 
 Using `psql`:
 
@@ -228,7 +292,7 @@ Or using `createdb`:
 createdb student_management
 ```
 
-### Tables
+### 2. Create tables
 
 Tables are created automatically on application startup through the FastAPI
 lifespan handler:
@@ -260,9 +324,9 @@ user can manage student records, so there is no per-user foreign key.
 
 ### Existing database migration
 
-The current application requires `students.course` to be `NOT NULL`. Fresh
-databases get this automatically. If you are upgrading an older database where
-`course` is nullable, apply the safe migration:
+The application requires `students.course` to be `NOT NULL`. Fresh databases get
+this automatically. If you are upgrading an older database where `course` is
+nullable, apply the safe migration:
 
 ```bash
 psql "$DATABASE_URL" -f migrations/001_students_course_not_null.sql
@@ -275,8 +339,8 @@ psql $env:DATABASE_URL -f migrations/001_students_course_not_null.sql
 ```
 
 The migration does **not** delete or recreate the database or any rows. If a
-row contains a `NULL` course, the `SET NOT NULL` statement fails safely and the
-transaction rolls back; fix that row and run it again.
+row contains a `NULL` course, `SET NOT NULL` fails safely and the transaction
+rolls back; resolve that row and run the migration again.
 
 ### Verify the connection
 
@@ -292,7 +356,7 @@ PostgreSQL connected successfully!
 
 ---
 
-## Running the Application
+## Running the API
 
 From the project root with the virtual environment active:
 
@@ -308,16 +372,23 @@ fastapi dev main.py
 
 The API is available at:
 
-- API root: <http://127.0.0.1:8000/>
-- Swagger UI: <http://127.0.0.1:8000/docs>
-- ReDoc: <http://127.0.0.1:8000/redoc>
-- OpenAPI JSON: <http://127.0.0.1:8000/openapi.json>
+| Resource | URL |
+| --- | --- |
+| API root | <http://127.0.0.1:8000/> |
+| Swagger UI | <http://127.0.0.1:8000/docs> |
+| ReDoc | <http://127.0.0.1:8000/redoc> |
+| OpenAPI JSON | <http://127.0.0.1:8000/openapi.json> |
+
+For production, omit `--reload` and run the app behind a process manager and
+HTTPS reverse proxy.
 
 ---
 
 ## Authentication
 
-Authentication uses OAuth2 password flow with bearer JWTs.
+Authentication uses the OAuth2 password flow with bearer JWTs.
+
+### Authentication flow
 
 ```mermaid
 sequenceDiagram
@@ -350,15 +421,7 @@ sequenceDiagram
     A-->>C: 200 OK + student page
 ```
 
-1. Create an account with `POST /auth/signup`.
-2. Log in with `POST /auth/login` using form data.
-3. Send the returned token as `Authorization: Bearer <access_token>`.
-4. Access protected routes such as `/students` and `/auth/me`.
-
-In Swagger UI, click **Authorize**, enter your email as the username and your
-password, and Swagger will attach the token automatically.
-
-### Signup
+### 1. Sign up
 
 ```bash
 curl -X POST http://127.0.0.1:8000/auth/signup \
@@ -375,7 +438,7 @@ Response `201 Created`:
 }
 ```
 
-### Login
+### 2. Log in
 
 `POST /auth/login` expects `application/x-www-form-urlencoded` data (OAuth2
 standard), not JSON:
@@ -396,7 +459,18 @@ Response `200 OK`:
 }
 ```
 
-### Current user
+### 3. Authorize requests
+
+Send the token in the `Authorization` header:
+
+```text
+Authorization: Bearer <access_token>
+```
+
+In Swagger UI, click **Authorize**, enter your email as the username and your
+password, and Swagger will attach the token automatically.
+
+### 4. Read the current user
 
 ```bash
 curl http://127.0.0.1:8000/auth/me \
@@ -405,9 +479,28 @@ curl http://127.0.0.1:8000/auth/me \
 
 ---
 
-## API Endpoints
+## API Reference
 
-### Public
+### Route graph
+
+```mermaid
+flowchart TD
+    API["Student Management API"] --> Public["Public routes"]
+    API --> Protected["Protected routes<br/>Bearer JWT required"]
+
+    Public --> Root["GET /"]
+    Public --> Signup["POST /auth/signup"]
+    Public --> Login["POST /auth/login"]
+
+    Protected --> Me["GET /auth/me"]
+    Protected --> Create["POST /students"]
+    Protected --> List["GET /students<br/>page + page_size"]
+    Protected --> Read["GET /students/{student_id}"]
+    Protected --> Update["PUT /students/{student_id}"]
+    Protected --> Delete["DELETE /students/{student_id}"]
+```
+
+### Public endpoints
 
 | Method | Endpoint | Description | Success |
 | --- | --- | --- | --- |
@@ -415,7 +508,9 @@ curl http://127.0.0.1:8000/auth/me \
 | `POST` | `/auth/signup` | Register a user | `201` |
 | `POST` | `/auth/login` | Obtain a JWT (form data) | `200` |
 
-### Protected — require `Authorization: Bearer <token>`
+### Protected endpoints
+
+Require `Authorization: Bearer <token>`.
 
 | Method | Endpoint | Description | Success |
 | --- | --- | --- | --- |
@@ -425,6 +520,27 @@ curl http://127.0.0.1:8000/auth/me \
 | `GET` | `/students/{student_id}` | Get one student | `200` |
 | `PUT` | `/students/{student_id}` | Replace student details | `200` |
 | `DELETE` | `/students/{student_id}` | Delete a student | `200` |
+
+### Student request body
+
+```json
+{
+  "name": "Ada Lovelace",
+  "age": 20,
+  "course": "Computer Science",
+  "email": "ada@example.com"
+}
+```
+
+### Validation rules
+
+| Field | Rule |
+| --- | --- |
+| `name` | 2–100 characters, not blank |
+| `age` | Integer greater than `0`, at most `120` |
+| `course` | 2–100 characters, not blank |
+| `email` | Valid email address; stored lowercase |
+| `password` | 8–128 characters (signup only) |
 
 ### Pagination
 
@@ -453,32 +569,38 @@ Response:
 }
 ```
 
-### Student request body
-
-```json
-{
-  "name": "Ada Lovelace",
-  "age": 20,
-  "course": "Computer Science",
-  "email": "ada@example.com"
-}
-```
-
-Validation rules:
-
-- `name`: 2–100 characters, not blank.
-- `age`: integer greater than `0` and at most `120`.
-- `course`: 2–100 characters, not blank.
-- `email`: valid email address; stored lowercase.
-- `password` (signup): 8–128 characters.
-
 ### Example protected request
+
+Create a student:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/students \
   -H "Authorization: Bearer <access_token>" \
   -H "Content-Type: application/json" \
   -d '{"name":"Ada Lovelace","age":20,"course":"Computer Science","email":"ada@example.com"}'
+```
+
+List students:
+
+```bash
+curl "http://127.0.0.1:8000/students?page=1&page_size=10" \
+  -H "Authorization: Bearer <access_token>"
+```
+
+Update a student:
+
+```bash
+curl -X PUT http://127.0.0.1:8000/students/1 \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Ada Byron","age":21,"course":"Mathematics","email":"ada.byron@example.com"}'
+```
+
+Delete a student:
+
+```bash
+curl -X DELETE http://127.0.0.1:8000/students/1 \
+  -H "Authorization: Bearer <access_token>"
 ```
 
 ---
@@ -491,9 +613,9 @@ curl -X POST http://127.0.0.1:8000/students \
 | `404 Not Found` | Student ID does not exist |
 | `409 Conflict` | Duplicate user email or duplicate student email |
 | `422 Unprocessable Entity` | Invalid input or invalid pagination parameters |
-| `500 Internal Server Error` | Database failure; the session is rolled back and no internals are exposed |
+| `500 Internal Server Error` | Database failure; the session is rolled back and internals are not exposed |
 
-Authentication failures return a generic message so it is not possible to
+Authentication failures return a generic message, so it is not possible to
 distinguish an unknown email from a wrong password.
 
 ### Request and error lifecycle graph
@@ -514,25 +636,26 @@ flowchart TD
 
 ---
 
-## Security Notes
+## Security
 
-- Passwords are hashed with Argon2; plaintext passwords are never stored.
+- Passwords are hashed with **Argon2**; plaintext passwords are never stored.
 - API responses never include `hashed_password`.
-- JWT tokens are signed with `JWT_SECRET_KEY` and include `sub`, `iat`, and
-  `exp` claims.
+- JWTs are signed with `JWT_SECRET_KEY` and include `sub`, `iat`, and `exp`
+  claims.
 - Expired and tampered tokens are rejected.
 - Login errors are deliberately generic.
-- Database sessions are closed in `finally`, and rolled back on exceptions.
+- Database sessions are closed in `finally` and rolled back on exceptions.
 - `.env` is git-ignored; only `.env.example` placeholders are committed.
-- Configuration is validated at startup; the app will not start with a missing
-  or too-short JWT secret.
+- Configuration is validated at startup; weak or placeholder secrets are
+  rejected.
+- JWT algorithms are restricted to `HS256`, `HS384`, and `HS512`.
 
 ---
 
 ## Testing
 
 The automated suite uses FastAPI `TestClient` with an isolated in-memory SQLite
-database. It never touches your PostgreSQL data.
+database. It never touches PostgreSQL data.
 
 Run all tests:
 
@@ -540,25 +663,23 @@ Run all tests:
 python -m pytest -v
 ```
 
-Run a single file:
+Run a single test file:
 
 ```bash
 python -m pytest tests/test_auth.py -v
 ```
 
-Coverage includes:
+### Test matrix
 
-- Signup success, duplicate signup, invalid email, short password.
-- Login success, wrong password, unknown email.
-- JWT generation, decoding, expiration, tampering.
-- Missing/invalid token rejection on protected routes.
-- `/auth/me` success and failure cases.
-- Authenticated student create, list, get, update, delete.
-- Duplicate student email handling.
-- Pagination and invalid pagination parameters.
-- Invalid student input and missing student IDs.
-- Expired token and token-for-unknown-user rejection.
-- Configuration validation (short/placeholder secrets and unsafe algorithms).
+| Area | Coverage |
+| --- | --- |
+| Authentication | Signup, duplicate signup, login, wrong password, unknown email, `/auth/me` |
+| Security / JWT | Hashing, verification, token generation, decoding, expiration, tampering |
+| Students | Create, list, get, update, delete, duplicate email, missing IDs |
+| Pagination | Page/page-size behavior and invalid parameters |
+| Validation | Invalid email, short password, blank fields, invalid age |
+| Authorization | Missing, invalid, expired, and unknown-user tokens |
+| Configuration | Short/placeholder secrets and unsafe algorithms |
 
 ### Test coverage graph
 
@@ -570,11 +691,7 @@ pie title Automated tests by area
     "Configuration" : 4
 ```
 
-**Verified result on Python 3.12.10:**
-
-```text
-36 passed in 2.16s
-```
+**Verified result on Python 3.12.10:** `36 passed, 0 failed`.
 
 Manual diagnostics:
 
@@ -585,21 +702,40 @@ python scripts/check_security.py
 
 ---
 
-## Git / GitHub Readiness
+## Troubleshooting
 
-`.gitignore` excludes:
+| Symptom | Resolution |
+| --- | --- |
+| `ModuleNotFoundError` | Activate the virtual environment and run `pip install -r requirements.txt` |
+| `JWT_SECRET_KEY is still a placeholder` | Replace it with a generated secret in `.env` |
+| `JWT_SECRET_KEY` validation error | Use at least 32 characters |
+| Database connection failed | Check `DATABASE_URL`, confirm PostgreSQL is running, and verify credentials |
+| `psql` is not recognized | Add PostgreSQL's `bin` directory to `PATH` or use the full path |
+| `401` after login | Include the `Bearer ` prefix and confirm the token has not expired |
+| `409` on student create | Use a unique student email |
+| `422` on student create | Check field lengths, age range, course, and email format |
 
-- `venv/` and `.venv/`
-- `__pycache__/` and Python bytecode
-- `.env` and other local env files
-- test/cache artifacts
-- local SQLite databases
+---
 
-Only `.env.example` is committed. Before pushing, confirm:
+## Production Hardening
 
-```bash
-git status
-git check-ignore -v .env
-```
+This repository is portfolio-grade and intentionally focused on API design,
+authentication, validation, and testing. For a production deployment, consider:
 
-`.env` should be ignored and must never appear in Git history.
+- **Alembic** for versioned, repeatable schema migrations.
+- **HTTPS** termination and secure headers at a reverse proxy.
+- **Rate limiting** on `/auth/login` and signup endpoints.
+- **Refresh tokens and token revocation** if long-lived sessions are required.
+- **CORS configuration** for known frontend origins.
+- **Secrets management** through a vault or cloud secret store.
+- **Observability** with structured logs, metrics, and tracing.
+- **Managed PostgreSQL** with backups, connection pooling, and monitoring.
+- **CI/CD** running `pytest` on every pull request.
+
+---
+
+## Author
+
+Maintained by [@pshkarsngh](https://github.com/pshkarsngh).
+
+Repository: [Student_Management_System](https://github.com/pshkarsngh/Student_Management_System)
