@@ -55,6 +55,25 @@ def get_students():
     return {
         "students": students
     }
+    # Update student details
+@app.put("/students/{student_id}")
+def update_student(student_id: int, updated_student: Student):
+
+    for student in students:
+        if student["id"] == student_id:
+
+            student["name"] = updated_student.name
+            student["age"] = updated_student.age
+            student["course"] = updated_student.course
+
+            return {
+                "message": "Student updated successfully",
+                "student": student
+            }
+
+    return {
+        "message": "Student not found"
+    }
 
 
 # Get a student by ID
