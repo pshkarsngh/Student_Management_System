@@ -121,22 +121,6 @@ flowchart LR
     Models --> DB
 ```
 
-### Request lifecycle
-
-```mermaid
-flowchart TD
-    Request["Incoming request"] --> Validate["Pydantic validation"]
-    Validate -->|"invalid"| E422["422 Unprocessable Entity"]
-    Validate -->|"valid"| AuthCheck{"Valid Bearer JWT?"}
-    AuthCheck -->|"no"| E401["401 Unauthorized"]
-    AuthCheck -->|"yes"| Handler["Route handler"]
-    Handler --> DB[("PostgreSQL")]
-    DB -->|"duplicate email"| E409["Rollback + 409 Conflict"]
-    DB -->|"other database error"| E500["Rollback + 500 Internal Server Error"]
-    DB -->|"success"| Response["Typed response model"]
-    Response --> Client["Client receives JSON"]
-```
-
 ---
 
 ## Tech Stack
